@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VisionMSG</title>
+    <style>
+        :root {
+            --bg-color: #f2f2f7;
+            --content-bg: #ffffff;
+            --text-color: #1d1d1f;
+            --secondary-text: #6e6e73;
+            --separator-color: #e5e5ea;
+            --blue-accent: #007aff;
+            --gray-button-bg: #e5e5ea;
+            --border-radius: 10px;
+        }
+        body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", "Segoe UI", Roboto, sans-serif; background-color: var(--bg-color); margin: 0; color: var(--text-color); display: flex; flex-direction: column; height: 100vh; }
+        .upload-section { padding: 50px 20px; text-align: center; }
+        .upload-area { border: 2px dashed #c7c7cc; border-radius: var(--border-radius); padding: 40px; cursor: pointer; transition: background-color 0.2s, border-color 0.2s; max-width: 500px; margin: auto; background-color: var(--content-bg); }
+        .upload-area:hover { border-color: var(--blue-accent); background-color: #f5f5f7; }
+        .upload-area img { max-width: 80px; margin-bottom: 20px; }
+        .upload-area p { margin: 0; font-size: 16px; color: var(--secondary-text); }
+        input[type="file"] { display: none; }
+        .preview-section { display: none; flex-grow: 1; background-color: var(--content-bg); overflow: hidden; flex-direction: column; }
+        .email-toolbar { display: flex; align-items: center; padding: 10px 20px; border-bottom: 1px solid var(--separator-color); flex-shrink: 0; }
+        .btn { background-color: var(--gray-button-bg); color: var(--text-color); border: none; padding: 6px 14px; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.2s; margin-left: 10px; }
+        .btn:hover { background-color: #dcdce1; }
+        .btn-primary { background-color: var(--blue-accent); color: white; }
+        .btn-primary:hover { background-color: #0056b3; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .email-header { flex-grow: 1; text-align: left; }
+        .email-header h2 { margin: 0; font-size: 18px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .email-header p { margin: 2px 0; color: var(--secondary-text); font-size: 13px; }
+        .email-content { display: flex; flex-direction: column; flex-grow: 1; overflow: hidden; padding: 20px; }
+        .attachments { flex-shrink: 0; padding-bottom: 15px; border-bottom: 1px solid var(--separator-color); margin-bottom: 15px; display:none; }
+        .attachments ul { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+        .attachments a { color: var(--blue-accent); text-decoration: none; cursor: pointer; background-color: #f0f0f5; padding: 5px 10px; border-radius: 6px; font-size: 13px; }
+        .email-body { flex-grow: 1; overflow-y: auto; font-size: 16px; line-height: 1.6; }
+        .status-message { padding: 10px; border-radius: 6px; margin-top: 20px; max-width: 500px; margin: 20px auto 0 auto; display: none; border: 1px solid; }
+        .status-error { background-color: #ffebe6; color: #d8000c; border-color: #ffc2b3; }
+        .footer-info { margin-top: 50px; font-size: 12px; color: var(--secondary-text); opacity: 0.8; }
+        .footer-info a { color: var(--secondary-text); text-decoration: underline; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="upload-section" id="upload-section">
+        <form id="upload-form">
+            <input type="file" name="file" id="file-input" accept=".msg">
+            <div class="upload-area" id="drop-area">
+                <img src="{{ icon_url }}" alt="Icône de l'application">
+                <p id="file-name">Cliquez ou glissez un fichier .msg ici</p>
+            </div>
+        </form>
+        <div id="status-message" class="status-message"></div>
+        <div class="footer-info">
+            Créé par Marko8787 | Version 1.2 | Ce logiciel est sous licence <a href="#" onclick="openLicense(event)">GNU GPLv3</a>
+        </div>
+    </div>
+
+    <div class="preview-section" id="preview-area">
+        <div class="email-toolbar">
+            <div class="email-header">
+                <h2 id="preview-subject"></h2>
+                <p><span id="preview-from"></span></p>
+            </div>
+            <button class="btn" id="reveal-btn" disabled>Révéler dans le Finder</button>
+            <button class="btn btn-primary" id="export-btn">Ouvrir dans Outlook</button>
+            <button class="btn" id="reset-btn">Nouveau</button>
+        </div>
+        <div class="email-content">
+            <div class="attachments" id="attachments-section">
+                <ul id="attachments-list"></ul>
+            </div>
+            <div class="email-body" id="preview-body"></div>
+        </div>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('file-input');
+        const statusMessage = document.getElementById('status-message');
+        const fileNameDisplay = document.getElementById('file-name');
+        const dropArea = document.getElementById('drop-area');
+        const uploadSection = document.getElementById('upload-section');
+        const previewArea = document.getElementById('preview-area');
+        const previewBody = document.getElementById('preview-body');
+        const resetBtn = document.getElementById('reset-btn');
+        const exportBtn = document.getElementById('export-btn');
+        const revealBtn = document.getElementById('reveal-btn');
+        const attachmentsSection = document.getElementById('attachments-section');
+
+        dropArea.addEventListener('click', () => fileInput.click());
+        ['dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, (e) => { e.preventDefault(); e.stopPropagation(); }, false);
+        });
+        dropArea.addEventListener('dragover', () => dropArea.style.borderColor = 'var(--blue-accent)');
+        dropArea.addEventListener('dragleave', () => dropArea.style.borderColor = '#c7c7cc');
+        dropArea.addEventListener('drop', (e) => {
+            dropArea.style.borderColor = '#c7c7cc';
+            fileInput.files = e.dataTransfer.files;
+            handleFileSelect();
+        });
+        fileInput.addEventListener('change', handleFileSelect);
+
+        resetBtn.addEventListener('click', () => {
+            previewArea.style.display = 'none';
+            uploadSection.style.display = 'block';
+            fileInput.value = '';
+            window.pywebview.api.set_window_title('VisionMSG');
+        });
+
+        exportBtn.addEventListener('click', () => window.pywebview.api.export_to_eml());
+        revealBtn.addEventListener('click', () => window.pywebview.api.reveal_attachments());
+        
+        previewBody.addEventListener('click', (event) => {
+            if (event.target.tagName === 'A' && event.target.href) {
+                event.preventDefault();
+                window.pywebview.api.open_external_link(event.target.href);
+            }
+        });
+
+        async function handleFileSelect() {
+            if (fileInput.files.length === 0) return;
+            displayMessage('', '');
+            fileNameDisplay.textContent = 'Analyse en cours...';
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            try {
+                const response = await fetch('/upload', { method: 'POST', body: formData });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    updatePreview(result);
+                    window.pywebview.api.set_window_title(result.subject || 'VisionMSG');
+                    uploadSection.style.display = 'none';
+                    previewArea.style.display = 'flex';
+                } else {
+                    displayMessage(result.message, 'error');
+                    fileNameDisplay.textContent = "Cliquez ou glissez un fichier .msg ici";
+                }
+            } catch (error) {
+                displayMessage('Une erreur de communication est survenue.', 'error');
+                fileNameDisplay.textContent = "Cliquez ou glissez un fichier .msg ici";
+            }
+        }
+
+        function updatePreview(data) {
+            document.getElementById('preview-subject').textContent = data.subject || '(Aucun sujet)';
+            document.getElementById('preview-from').textContent = `De : ${data.from || 'N/A'} | À : ${data.to || 'N/A'}`;
+            document.getElementById('preview-body').innerHTML = data.body || '';
+
+            const attachmentsList = document.getElementById('attachments-list');
+            attachmentsList.innerHTML = '';
+            
+            if (data.attachments && data.attachments.length > 0) {
+                data.attachments.forEach(filename => {
+                    const li = document.createElement('li');
+                    const a = document.createElement('a');
+                    a.textContent = filename;
+                    a.href = '#';
+                    a.onclick = () => window.pywebview.api.open_attachment(filename);
+                    li.appendChild(a);
+                    attachmentsList.appendChild(li);
+                });
+                attachmentsSection.style.display = 'block';
+                revealBtn.disabled = false;
+            } else {
+                attachmentsSection.style.display = 'none';
+                revealBtn.disabled = true;
+            }
+        }
+        
+        function displayMessage(message, type) {
+            if (message) {
+                statusMessage.textContent = message;
+                statusMessage.className = `status-message status-${type}`;
+                statusMessage.style.display = 'block';
+            } else {
+                statusMessage.style.display = 'none';
+            }
+        }
+
+        function openLicense(event) {
+            event.preventDefault();
+            window.pywebview.api.open_external_link('https://www.gnu.org/licenses/gpl-3.0.html');
+        }
+    </script>
+</body>
+</html>
