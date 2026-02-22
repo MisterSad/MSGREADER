@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 # --------------------------------------------------
-# VisionMSG pour macOS
+# MSG READER pour macOS
 # Copyright (C) 2025 Marko8787
 #
 # Ce programme est un logiciel libre ; vous pouvez le redistribuer et/ou le
@@ -42,7 +42,7 @@ def get_base_path():
     else:
         return os.path.dirname(os.path.abspath(__file__))
 
-WORK_DIR = os.path.join(os.path.expanduser('~'), 'VisionMSG_FichiersTemporaires')
+WORK_DIR = os.path.join(os.path.expanduser('~'), 'MSGREADER_FichiersTemporaires')
 TEMPLATE_FOLDER = os.path.join(get_base_path(), 'templates')
 STATIC_FOLDER = os.path.join(get_base_path(), 'static')
 
@@ -59,15 +59,20 @@ class Api:
         self.current_msg_path = None
 
     def open_attachment(self, filename):
-        file_path = os.path.join(app.config['WORK_FOLDER'], filename)
+        safe_filename = secure_filename(filename)
+        if not safe_filename: return {'status': 'error', 'message': 'Nom de fichier invalide.'}
+        file_path = os.path.join(app.config['WORK_FOLDER'], safe_filename)
         if os.path.exists(file_path):
             try: subprocess.run(['open', file_path], check=True)
             except Exception as e: return {'status': 'error', 'message': str(e)}
         return {'status': 'error', 'message': 'Fichier non trouvé.'}
 
     def open_external_link(self, url):
-        try: subprocess.run(['open', url], check=True)
-        except Exception as e: return {'status': 'error', 'message': str(e)}
+        if url.startswith(('http://', 'https://', 'mailto:')):
+            try: subprocess.run(['open', url], check=True)
+            except Exception as e: return {'status': 'error', 'message': str(e)}
+        else:
+            return {'status': 'error', 'message': 'Lien externe non autorisé.'}
 
     def reveal_attachments(self):
         try: subprocess.run(['open', app.config['WORK_FOLDER']], check=True)
@@ -166,6 +171,17 @@ def upload_file():
         try:
             if msg.htmlBody:
                 soup = BeautifulSoup(msg.htmlBody.decode('utf-8', 'ignore'), 'html.parser')
+                
+                # Sanitize HTML tags
+                for script in soup(['script', 'iframe', 'object', 'embed', 'applet']):
+                    script.decompose()
+
+                # Sanitize dangerous attributes
+                for tag in soup.find_all(True):
+                    attrs_to_remove = [attr for attr in tag.attrs if attr.lower().startswith('on') or attr.lower() == 'formaction']
+                    for attr in attrs_to_remove:
+                        del tag[attr]
+
                 for img in soup.find_all('img'):
                     src = img.get('src')
                     if src and src.startswith('cid:'):
@@ -186,6 +202,6 @@ def upload_file():
 # ----- Lancement de l'application -----
 if __name__ == '__main__':
     api = Api()
-    window = webview.create_window('VisionMSG', app, js_api=api, width=800, height=700, resizable=True)
+    window = webview.create_window('MSG READER', app, js_api=api, width=800, height=700, resizable=True)
     api.window = window
     webview.start()
